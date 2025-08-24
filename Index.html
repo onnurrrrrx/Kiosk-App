@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Kiosk Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ZXing Barcode Scanner -->
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Poppins', sans-serif; }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .scanner-frame {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 0 auto;
+            border: 3px solid #10b981;
+            border-radius: 20px;
+            overflow: hidden;
+            background: #1f2937;
+        }
+        
+        .scanner-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #10b981, transparent);
+            animation: scanLine 2s ease-in-out infinite;
+        }
+        
+        @keyframes scanLine {
+            0%, 100% { top: 10px; opacity: 0; }
+            50% { top: 50%; opacity: 1; }
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .bounce-in {
+            animation: bounceIn 0.5s ease-out;
+        }
+        
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.05); }
+            70% { transform: scale(0.9); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Notification Container -->
+    <div id="notifications" class="notification"></div>
+    
+    <div id="app" class="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative overflow-hidden">
+        <!-- Header -->
+        <div class="gradient-bg text-white p-6 relative">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">Smart Kiosk Pro</h1>
+                    <p class="text-white/80 text-sm">Moderne Kassenlösung</p>
+                </div>
+                <button id="backBtn" class="hidden glass-effect hover:bg-white/20 px-4 py-2 rounded-xl text-sm font-medium transition-all">
+                    ← Zurück
+                </button>
+            </div>
+            
+            <!-- Stats Bar -->
+            <div id="statsBar" class="flex gap-4 mt-4 text-center">
+                <div class="flex-1 glass-effect rounded-xl p-3">
+                    <div class="text-xl font-bold" id="dailySales">0</div>
+                    <div class="text-xs text-white/80">Heute verkauft</div>
+                </div>
+                <div class="flex-1 glass-effect rounded-xl p-3">
+                    <div class="text-xl font-bold" id="totalRevenue">0.00€</div>
+                    <div class="text-xs text-white/80">Tagesumsatz</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Screen -->
+        <div id="mainScreen" class="p-6">
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <button id="scanBtn" class="card-hover bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-2xl font-semibold text-center shadow-lg">
+                    <div class="text-3xl mb-2">📱</div>
+                    <div>Scannen</div>
+                </button>
+                
+                <button id="productsBtn" class="card-hover bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-2xl font-semibold text-center shadow-lg">
+                    <div class="text-3xl mb-2">📦</div>
+                    <div>Produkte</div>
+                </button>
+                
+                <button id="salesBtn" class="card-hover bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-2xl font-semibold text-center shadow-lg">
+                    <div class="text-3xl mb-2">📊</div>
+                    <div>Verkäufe</div>
+                </button>
+                
+                <button id="cashRegisterBtn" class="card-hover bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl font-semibold text-center shadow-lg">
+                    <div class="text-3xl mb-2">💰</div>
+                    <div>Kasse</div>
+                </button>
+                
+                <button id="settingsBtn" class="card-hover bg-gradient-to-br from-gray-500 to-gray-600 text-white p-6 rounded-2xl font-semibold text-center shadow-lg">
+                    <div class="text-3xl mb-2">⚙️</div>
+                    <div>Einstellungen</div>
+                </button>
+            </div>
+            
+            <!-- Quick Overview -->
+            <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100">
+                <h3 class="font-semibold text-gray-800 mb-4 flex items-center">
+                    <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                    Live Übersicht
+                </h3>
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600" id="totalProducts">0</div>
+                        <div class="text-xs text-gray-500">Produkte</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-red-500" id="lowStockCount">0</div>
+                        <div class="text-xs text-gray-500">Wenig Bestand</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-green-500" id="todayTransactions">0</div>
+                        <div class="text-xs text-gray-500">Transaktionen</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Low Stock Alert -->
+            <div id="lowStockAlert" class="hidden mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+                <div class="flex items-center">
+                    <div class="text-red-500 text-xl mr-3">⚠️</div>
+                    <div>
+                        <div class="font-semibold text-red-800">Niedriger Bestand!</div>
+                        <div class="text-sm text-red-600" id="lowStockItems"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanner Screen -->
+        <div id="scannerScreen" class="hidden p-6">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Barcode Scanner</h2>
+                <p class="text-gray-600">Scannen Sie den Produktcode</p>
+            </div>
+            
+            <div class="scanner-frame mb-6">
+                <!-- Video-Element für Kamera -->
+                <video id="videoPreview" class="w-full h-full object-cover rounded-2xl" style="display:none;"></video>
+                <div id="scannerPlaceholder" class="w-full h-full flex items-center justify-center text-white">
+                    <div class="text-center">
+                        <div class="text-5xl mb-3 pulse-animation">📷</div>
+                        <div class="text-sm">Kamera bereit</div>
+                    </div>
+                </div>
+                <div class="scanner-line"></div>
+            </div>
+            
+            <!-- Camera Controls -->
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <button id="startCameraBtn" onclick="startCameraScan()" class="bg-green-600 hover:bg-green-700 text-white p-3 rounded-xl text-sm font-medium transition-colors">
+                    📹 Kamera starten
+                </button>
+                <button id="stopCameraBtn" onclick="stopCameraScan()" class="bg-red-600 hover:bg-red-700 text-white p-3 rounded-xl text-sm font-medium transition-colors" style="display:none;">
+                    ⏹️ Kamera stoppen
+                </button>
+            </div>
+            
+            <!-- Camera Scan Button -->
+            <div class="mb-4">
+                <button onclick="startCameraScan()" class="w-full bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-xl font-medium transition-colors">
+                    📷 Barcode scannen
+                </button>
+            </div>
+            
+            <!-- Quick Scan Buttons -->
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <button onclick="app.quickScan('4000177301234')" class="bg-gray-100 hover:bg-gray-200 p-3 rounded-xl text-sm font-medium transition-colors">
+                    🥤 Coca Cola
+                </button>
+                <button onclick="app.quickScan('4000177301235')" class="bg-gray-100 hover:bg-gray-200 p-3 rounded-xl text-sm font-medium transition-colors">
+                    🍫 Snickers
+                </button>
+            </div>
+            
+            <!-- Manual Input -->
+            <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Barcode eingeben:</label>
+                <div class="flex gap-2">
+                    <input type="text" id="manualBarcode" placeholder="Barcode..." 
+                           class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <button id="searchBarcode" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition-colors">
+                        Suchen
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Scan Result -->
+            <div id="scanResult" class="hidden"></div>
+        </div>
+
+        <!-- Products Screen -->
+        <div id="productsScreen" class="hidden">
+            <div class="p-4 bg-gray-50 border-b sticky top-0 z-10">
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="searchInput" placeholder="Suchen..." 
+                           class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <button id="addProductBtn" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-medium transition-colors">
+                        + Neu
+                    </button>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button id="filterAll" class="filter-btn bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium">Alle</button>
+                    <button id="filterLowStock" class="filter-btn bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium">Wenig Bestand</button>
+                    <button id="filterOutOfStock" class="filter-btn bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium">Ausverkauft</button>
+                </div>
+            </div>
+            
+            <div id="productsList" class="p-4 space-y-3"></div>
+        </div>
+
+        <!-- Sales Screen -->
+        <div id="salesScreen" class="hidden p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Verkaufsstatistiken</h2>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-xl">
+                    <div class="text-2xl font-bold" id="todayRevenue">0.00€</div>
+                    <div class="text-sm opacity-80">Heute</div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-xl">
+                    <div class="text-2xl font-bold" id="todaySalesCount">0</div>
+                    <div class="text-sm opacity-80">Verkäufe</div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl p-4 shadow-lg">
+                <h3 class="font-semibold text-gray-800 mb-4">Letzte Verkäufe</h3>
+                <div id="recentSales" class="space-y-2"></div>
+            </div>
+        </div>
+
+        <!-- Cash Register Screen -->
+        <div id="cashRegisterScreen" class="hidden">
+            <!-- Cash Register Header -->
+            <div class="bg-gradient-to-r from-green-600 to-green-700 text-white p-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xl font-bold">Kasse</h2>
+                    <div class="text-right">
+                        <div class="text-sm opacity-80">Gesamt</div>
+                        <div class="text-2xl font-bold" id="cartTotal">0.00€</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Shopping Cart -->
+            <div class="p-4 bg-gray-50 border-b">
+                <h3 class="font-semibold text-gray-800 mb-3">Warenkorb (<span id="cartItemCount">0</span> Artikel)</h3>
+                <div id="cartItems" class="space-y-2 max-h-40 overflow-y-auto">
+                    <div class="text-center text-gray-500 py-4">Warenkorb ist leer</div>
+                </div>
+                <div class="flex gap-2 mt-3">
+                    <button id="clearCart" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl font-medium transition-colors">
+                        🗑️ Leeren
+                    </button>
+                    <button id="checkoutBtn" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl font-medium transition-colors" disabled>
+                        💳 Bezahlen
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Product Search -->
+            <div class="p-4 border-b bg-white">
+                <div class="flex gap-2 mb-3">
+                    <input type="text" id="cashRegisterSearch" placeholder="Produkt suchen oder Barcode scannen..." 
+                           class="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                    <button id="addToCartBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-medium transition-colors">
+                        + Hinzufügen
+                    </button>
+                </div>
+                
+                <!-- Quick Add Buttons -->
+                <div class="grid grid-cols-2 gap-2" id="quickAddButtons"></div>
+            </div>
+            
+            <!-- Available Products -->
+            <div class="p-4">
+                <h3 class="font-semibold text-gray-800 mb-3">Verfügbare Produkte</h3>
+                <div id="cashRegisterProducts" class="space-y-2 max-h-60 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <!-- Settings Screen -->
+        <div id="settingsScreen" class="hidden p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Einstellungen</h2>
+            
+            <div class="space-y-4">
+                <div class="bg-white rounded-xl p-4 shadow-lg">
+                    <h3 class="font-semibold text-gray-800 mb-3">Daten</h3>
+                    <div class="space-y-2">
+                        <button id="exportData" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition-colors">
+                            📤 Daten exportieren
+                        </button>
+                        <button id="importData" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition-colors">
+                            📥 Daten importieren
+                        </button>
+                        <button id="resetData" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-medium transition-colors">
+                            🗑️ Alle Daten löschen
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl p-4 shadow-lg">
+                    <h3 class="font-semibold text-gray-800 mb-3">Benachrichtigungen</h3>
+                    <label class="flex items-center justify-between">
+                        <span>Bestandswarnungen</span>
+                        <input type="checkbox" id="stockAlerts" checked class="w-5 h-5 text-blue-600 rounded">
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Checkout Modal -->
+        <div id="checkoutModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-md bounce-in">
+                <h3 class="text-xl font-bold text-gray-800 mb-6">Bezahlung</h3>
+                
+                <div class="space-y-4">
+                    <!-- Order Summary -->
+                    <div class="bg-gray-50 rounded-xl p-4">
+                        <h4 class="font-semibold text-gray-800 mb-2">Bestellübersicht</h4>
+                        <div id="checkoutSummary" class="space-y-1 text-sm"></div>
+                        <div class="border-t pt-2 mt-2">
+                            <div class="flex justify-between font-bold text-lg">
+                                <span>Gesamt:</span>
+                                <span id="checkoutTotal">0.00€</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Payment Methods -->
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-3">Zahlungsart</h4>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button class="payment-method bg-green-100 hover:bg-green-200 border-2 border-green-300 p-3 rounded-xl text-center transition-colors" data-method="cash">
+                                <div class="text-2xl mb-1">💵</div>
+                                <div class="text-sm font-medium">Bar</div>
+                            </button>
+                            <button class="payment-method bg-blue-100 hover:bg-blue-200 border-2 border-blue-300 p-3 rounded-xl text-center transition-colors" data-method="card">
+                                <div class="text-2xl mb-1">💳</div>
+                                <div class="text-sm font-medium">Karte</div>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Cash Payment -->
+                    <div id="cashPayment" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Erhaltener Betrag (€)</label>
+                        <input type="number" id="cashReceived" step="0.01" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                        <div id="changeAmount" class="mt-2 text-center font-bold text-green-600"></div>
+                    </div>
+                    
+                    <div class="flex gap-3 pt-4">
+                        <button id="cancelCheckout" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 rounded-xl font-medium transition-colors">
+                            Abbrechen
+                        </button>
+                        <button id="completePayment" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition-colors" disabled>
+                            Bezahlung abschließen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Modal -->
+        <div id="productModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-md bounce-in">
+                <h3 id="modalTitle" class="text-xl font-bold text-gray-800 mb-6">Produkt hinzufügen</h3>
+                
+                <form id="productForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Produktname *</label>
+                        <input type="text" id="productName" required 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Preis (€) *</label>
+                            <input type="number" id="productPrice" step="0.01" required 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Kategorie</label>
+                            <select id="productCategory" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="Getränke">Getränke</option>
+                                <option value="Snacks">Snacks</option>
+                                <option value="Süßwaren">Süßwaren</option>
+                                <option value="Sonstiges">Sonstiges</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Barcode *</label>
+                        <input type="text" id="productBarcode" required 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Bestand</label>
+                            <input type="number" id="productStock" value="0" 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Min. Bestand</label>
+                            <input type="number" id="productMinStock" value="5" 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3 pt-6">
+                        <button type="button" id="cancelModal" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 rounded-xl font-medium transition-colors">
+                            Abbrechen
+                        </button>
+                        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition-colors">
+                            Speichern
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SmartKioskApp {
+            constructor() {
+                this.products = JSON.parse(localStorage.getItem('smartKioskProducts')) || this.getDefaultProducts();
+                this.sales = JSON.parse(localStorage.getItem('smartKioskSales')) || [];
+                this.settings = JSON.parse(localStorage.getItem('smartKioskSettings')) || { stockAlerts: true };
+                this.currentScreen = 'main';
+                this.editingProduct = null;
+                this.currentFilter = 'all';
+                this.cart = [];
+                this.selectedPaymentMethod = null;
+                
+                this.initializeElements();
+                this.bindEvents();
+                this.updateAllStats();
+                this.renderProducts();
+                this.checkLowStock();
+            }
+            
+            getDefaultProducts() {
+                return [
+                    { id: 1, name: 'Coca Cola 0,5L', price: 1.50, barcode: '4000177301234', stock: 24, minStock: 5, category: 'Getränke' },
+                    { id: 2, name: 'Snickers', price: 1.20, barcode: '4000177301235', stock: 15, minStock: 10, category: 'Süßwaren' },
+                    { id: 3, name: 'Wasser 0,5L', price: 0.80, barcode: '4000177301236', stock: 3, minStock: 5, category: 'Getränke' },
+                    { id: 4, name: 'Kaugummi', price: 0.60, barcode: '4000177301237', stock: 8, minStock: 5, category: 'Süßwaren' },
+                    { id: 5, name: 'Energy Drink', price: 2.50, barcode: '4000177301238', stock: 0, minStock: 3, category: 'Getränke' }
+                ];
+            }
+            
+            initializeElements() {
+                this.elements = {
+                    mainScreen: document.getElementById('mainScreen'),
+                    scannerScreen: document.getElementById('scannerScreen'),
+                    productsScreen: document.getElementById('productsScreen'),
+                    salesScreen: document.getElementById('salesScreen'),
+                    settingsScreen: document.getElementById('settingsScreen'),
+                    cashRegisterScreen: document.getElementById('cashRegisterScreen'),
+                    productModal: document.getElementById('productModal'),
+                    checkoutModal: document.getElementById('checkoutModal'),
+                    backBtn: document.getElementById('backBtn'),
+                    notifications: document.getElementById('notifications')
+                };
+            }
+            
+            bindEvents() {
+                // Navigation
+                document.getElementById('scanBtn').addEventListener('click', () => this.showScreen('scanner'));
+                document.getElementById('productsBtn').addEventListener('click', () => this.showScreen('products'));
+                document.getElementById('salesBtn').addEventListener('click', () => this.showScreen('sales'));
+                document.getElementById('cashRegisterBtn').addEventListener('click', () => this.showScreen('cashRegister'));
+                document.getElementById('settingsBtn').addEventListener('click', () => this.showScreen('settings'));
+                this.elements.backBtn.addEventListener('click', () => this.showScreen('main'));
+                
+                // Scanner
+                document.getElementById('searchBarcode').addEventListener('click', () => this.searchByBarcode());
+                document.getElementById('manualBarcode').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.searchByBarcode();
+                });
+                
+                // Products
+                document.getElementById('searchInput').addEventListener('input', () => this.renderProducts());
+                document.getElementById('addProductBtn').addEventListener('click', () => this.showProductModal());
+                
+                // Filters
+                document.getElementById('filterAll').addEventListener('click', () => this.setFilter('all'));
+                document.getElementById('filterLowStock').addEventListener('click', () => this.setFilter('lowStock'));
+                document.getElementById('filterOutOfStock').addEventListener('click', () => this.setFilter('outOfStock'));
+                
+                // Modal
+                document.getElementById('cancelModal').addEventListener('click', () => this.hideProductModal());
+                document.getElementById('productForm').addEventListener('submit', (e) => this.saveProduct(e));
+                
+                // Cash Register
+                document.getElementById('cashRegisterSearch').addEventListener('input', () => this.renderCashRegisterProducts());
+                document.getElementById('addToCartBtn').addEventListener('click', () => this.addToCartFromSearch());
+                document.getElementById('clearCart').addEventListener('click', () => this.clearCart());
+                document.getElementById('checkoutBtn').addEventListener('click', () => this.showCheckout());
+                
+                // Checkout
+                document.getElementById('cancelCheckout').addEventListener('click', () => this.hideCheckout());
+                document.getElementById('completePayment').addEventListener('click', () => this.completePayment());
+                document.getElementById('cashReceived').addEventListener('input', () => this.calculateChange());
+                
+                // Payment methods
+                document.querySelectorAll('.payment-method').forEach(btn => {
+                    btn.addEventListener('click', (e) => this.selectPaymentMethod(e.target.closest('.payment-method').dataset.method));
+                });
+                
+                // Settings
+                document.getElementById('exportData').addEventListener('click', () => this.exportData());
+                document.getElementById('resetData').addEventListener('click', () => this.resetData());
+                document.getElementById('stockAlerts').addEventListener('change', (e) => {
+                    this.settings.stockAlerts = e.target.checked;
+                    this.saveSettings();
+                });
+            }
+            
+            showScreen(screen) {
+                // Hide all screens
+                Object.values(this.elements).forEach(el => {
+                    if (el && el.classList) el.classList.add('hidden');
+                });
+                
+                // Show selected screen
+                const screenElement = this.elements[screen + 'Screen'];
+                if (screenElement) {
+                    screenElement.classList.remove('hidden');
+                    screenElement.classList.add('slide-in');
+                }
+                
+                this.elements.backBtn.classList.toggle('hidden', screen === 'main');
+                this.currentScreen = screen;
+                
+                if (screen === 'sales') this.renderSales();
+                if (screen === 'cashRegister') this.renderCashRegister();
+            }
+            
+            quickScan(barcode) {
+                document.getElementById('manualBarcode').value = barcode;
+                this.searchByBarcode();
+            }
+            
+            searchByBarcode() {
+                const barcode = document.getElementById('manualBarcode').value.trim();
+                if (!barcode) return;
+                
+                const product = this.products.find(p => p.barcode === barcode);
+                this.showScanResult(product, !!product, barcode);
+            }
+            
+            showScanResult(product, found, barcode = '') {
+                const resultDiv = document.getElementById('scanResult');
+                
+                if (found && product) {
+                    const stockStatus = product.stock <= product.minStock ? 'text-red-600' : 'text-green-600';
+                    const stockIcon = product.stock === 0 ? '❌' : product.stock <= product.minStock ? '⚠️' : '✅';
+                    
+                    resultDiv.innerHTML = `
+                        <div class="bg-white rounded-2xl p-6 shadow-lg bounce-in">
+                            <div class="text-center">
+                                <div class="text-green-600 text-3xl mb-3">✅</div>
+                                <h3 class="text-xl font-bold text-gray-800 mb-2">${product.name}</h3>
+                                <div class="text-3xl font-bold text-blue-600 mb-2">${product.price.toFixed(2)} €</div>
+                                <div class="text-sm text-gray-500 mb-4">📦 ${product.category}</div>
+                                <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-medium">Bestand:</span>
+                                        <span class="${stockStatus} font-bold">${stockIcon} ${product.stock} Stück</span>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button onclick="app.sellProduct(${product.id})" 
+                                            class="bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition-colors ${product.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}"
+                                            ${product.stock === 0 ? 'disabled' : ''}>
+                                        💰 Verkaufen
+                                    </button>
+                                    <button onclick="app.editProduct(${product.id})" 
+                                            class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition-colors">
+                                        ✏️ Bearbeiten
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="bg-white rounded-2xl p-6 shadow-lg bounce-in">
+                            <div class="text-center">
+                                <div class="text-red-600 text-3xl mb-3">❌</div>
+                                <h3 class="text-lg font-bold text-gray-800 mb-2">Nicht gefunden</h3>
+                                <p class="text-gray-600 mb-4">Barcode "${barcode}" existiert nicht in der Datenbank.</p>
+                                <button onclick="app.addNewProduct('${barcode}')" 
+                                        class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition-colors">
+                                    ➕ Neues Produkt hinzufügen
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                resultDiv.classList.remove('hidden');
+                document.getElementById('manualBarcode').value = '';
+            }
+            
+            sellProduct(productId) {
+                const product = this.products.find(p => p.id === productId);
+                if (!product || product.stock <= 0) return;
+                
+                product.stock--;
+                
+                // Record sale
+                const sale = {
+                    id: Date.now(),
+                    productId: product.id,
+                    productName: product.name,
+                    price: product.price,
+                    timestamp: new Date().toISOString(),
+                    date: new Date().toDateString()
+                };
+                
+                this.sales.push(sale);
+                this.saveData();
+                this.updateAllStats();
+                this.showNotification(`${product.name} verkauft! (+${product.price.toFixed(2)}€)`, 'success');
+                
+                // Refresh scan result
+                this.searchByBarcode();
+                
+                // Check for low stock
+                if (product.stock <= product.minStock && this.settings.stockAlerts) {
+                    this.showNotification(`⚠️ ${product.name} hat niedrigen Bestand!`, 'warning');
+                }
+            }
+            
+            addNewProduct(barcode = '') {
+                this.editingProduct = null;
+                document.getElementById('modalTitle').textContent = 'Neues Produkt hinzufügen';
+                this.resetProductForm();
+                document.getElementById('productBarcode').value = barcode;
+                this.showProductModal();
+            }
+            
+            editProduct(productId) {
+                const product = this.products.find(p => p.id === productId);
+                if (!product) return;
+                
+                this.editingProduct = product;
+                document.getElementById('modalTitle').textContent = 'Produkt bearbeiten';
+                document.getElementById('productName').value = product.name;
+                document.getElementById('productPrice').value = product.price;
+                document.getElementById('productBarcode').value = product.barcode;
+                document.getElementById('productStock').value = product.stock;
+                document.getElementById('productMinStock').value = product.minStock;
+                document.getElementById('productCategory').value = product.category || 'Sonstiges';
+                this.showProductModal();
+            }
+            
+            resetProductForm() {
+                document.getElementById('productName').value = '';
+                document.getElementById('productPrice').value = '';
+                document.getElementById('productBarcode').value = '';
+                document.getElementById('productStock').value = '0';
+                document.getElementById('productMinStock').value = '5';
+                document.getElementById('productCategory').value = 'Sonstiges';
+            }
+            
+            showProductModal() {
+                this.elements.productModal.classList.remove('hidden');
+            }
+            
+            hideProductModal() {
+                this.elements.productModal.classList.add('hidden');
+                this.editingProduct = null;
+            }
+            
+            saveProduct(e) {
+                e.preventDefault();
+                
+                const formData = {
+                    name: document.getElementById('productName').value.trim(),
+                    price: parseFloat(document.getElementById('productPrice').value),
+                    barcode: document.getElementById('productBarcode').value.trim(),
+                    stock: parseInt(document.getElementById('productStock').value),
+                    minStock: parseInt(document.getElementById('productMinStock').value),
+                    category: document.getElementById('productCategory').value
+                };
+                
+                if (!formData.name || !formData.barcode || isNaN(formData.price)) {
+                    this.showNotification('Bitte füllen Sie alle Pflichtfelder aus.', 'error');
+                    return;
+                }
+                
+                // Check for duplicate barcode
+                const existingProduct = this.products.find(p => 
+                    p.barcode === formData.barcode && 
+                    (!this.editingProduct || p.id !== this.editingProduct.id)
+                );
+                
+                if (existingProduct) {
+                    this.showNotification('Ein Produkt mit diesem Barcode existiert bereits.', 'error');
+                    return;
+                }
+                
+                if (this.editingProduct) {
+                    Object.assign(this.editingProduct, formData);
+                    this.showNotification('Produkt erfolgreich aktualisiert!', 'success');
+                } else {
+                    const newProduct = { id: Date.now(), ...formData };
+                    this.products.push(newProduct);
+                    this.showNotification('Neues Produkt hinzugefügt!', 'success');
+                }
+                
+                this.saveData();
+                this.updateAllStats();
+                this.renderProducts();
+                this.hideProductModal();
+            }
+            
+            deleteProduct(productId) {
+                if (confirm('Sind Sie sicher, dass Sie dieses Produkt löschen möchten?')) {
+                    this.products = this.products.filter(p => p.id !== productId);
+                    this.saveData();
+                    this.updateAllStats();
+                    this.renderProducts();
+                    this.showNotification('Produkt gelöscht!', 'success');
+                }
+            }
+            
+            setFilter(filter) {
+                this.currentFilter = filter;
+                
+                document.querySelectorAll('.filter-btn').forEach(btn => {
+                    btn.classList.remove('bg-blue-600', 'text-white');
+                    btn.classList.add('bg-gray-200', 'text-gray-700');
+                });
+                
+                const activeBtn = document.getElementById(`filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`);
+                if (activeBtn) {
+                    activeBtn.classList.remove('bg-gray-200', 'text-gray-700');
+                    activeBtn.classList.add('bg-blue-600', 'text-white');
+                }
+                
+                this.renderProducts();
+            }
+            
+            renderProducts() {
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                let filteredProducts = this.products;
+                
+                if (searchTerm) {
+                    filteredProducts = filteredProducts.filter(product =>
+                        product.name.toLowerCase().includes(searchTerm) ||
+                        product.barcode.includes(searchTerm) ||
+                        product.category.toLowerCase().includes(searchTerm)
+                    );
+                }
+                
+                if (this.currentFilter === 'lowStock') {
+                    filteredProducts = filteredProducts.filter(p => p.stock <= p.minStock && p.stock > 0);
+                } else if (this.currentFilter === 'outOfStock') {
+                    filteredProducts = filteredProducts.filter(p => p.stock === 0);
+                }
+                
+                const html = filteredProducts.map(product => {
+                    let stockStatus, stockColor, stockIcon;
+                    
+                    if (product.stock === 0) {
+                        stockStatus = 'bg-red-50 border-red-200';
+                        stockColor = 'text-red-600';
+                        stockIcon = '❌';
+                    } else if (product.stock <= product.minStock) {
+                        stockStatus = 'bg-yellow-50 border-yellow-200';
+                        stockColor = 'text-yellow-600';
+                        stockIcon = '⚠️';
+                    } else {
+                        stockStatus = 'bg-white border-gray-200';
+                        stockColor = 'text-green-600';
+                        stockIcon = '✅';
+                    }
+                    
+                    return `
+                        <div class="card-hover ${stockStatus} border rounded-2xl p-4">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="flex-1">
+                                    <h3 class="font-semibold text-gray-800">${product.name}</h3>
+                                    <div class="text-sm text-gray-500">📦 ${product.category}</div>
+                                </div>
+                                <div class="text-xl font-bold text-blue-600">${product.price.toFixed(2)}€</div>
+                            </div>
+                            <div class="text-xs text-gray-500 mb-3">Barcode: ${product.barcode}</div>
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="text-sm font-medium">Bestand:</span>
+                                <span class="${stockColor} font-bold text-sm">${stockIcon} ${product.stock} Stück</span>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button onclick="app.sellProduct(${product.id})" 
+                                        class="bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded-xl text-sm font-medium transition-colors ${product.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}"
+                                        ${product.stock === 0 ? 'disabled' : ''}>
+                                    💰
+                                </button>
+                                <button onclick="app.editProduct(${product.id})" 
+                                        class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-xl text-sm font-medium transition-colors">
+                                    ✏️
+                                </button>
+                                <button onclick="app.deleteProduct(${product.id})" 
+                                        class="bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded-xl text-sm font-medium transition-colors">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                document.getElementById('productsList').innerHTML = html || 
+                    '<div class="text-center text-gray-500 py-8">Keine Produkte gefunden</div>';
+            }
+            
+            renderSales() {
+                const today = new Date().toDateString();
+                const todaySales = this.sales.filter(sale => sale.date === today);
+                
+                const html = todaySales.slice(-10).reverse().map(sale => {
+                    const time = new Date(sale.timestamp).toLocaleTimeString('de-DE', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                    
+                    return `
+                        <div class="flex justify-between items-center bg-gray-50 rounded-xl p-3">
+                            <div>
+                                <div class="font-medium">${sale.productName}</div>
+                                <div class="text-sm text-gray-500">${time}</div>
+                            </div>
+                            <div class="text-green-600 font-bold">${sale.price.toFixed(2)}€</div>
+                        </div>
+                    `;
+                }).join('');
+                
+                document.getElementById('recentSales').innerHTML = html || 
+                    '<div class="text-center text-gray-500 py-4">Noch keine Verkäufe heute</div>';
+            }
+            
+            updateAllStats() {
+                const today = new Date().toDateString();
+                const todaySales = this.sales.filter(sale => sale.date === today);
+                const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.price, 0);
+                const lowStockProducts = this.products.filter(p => p.stock <= p.minStock);
+                
+                // Main stats
+                document.getElementById('totalProducts').textContent = this.products.length;
+                document.getElementById('lowStockCount').textContent = lowStockProducts.length;
+                document.getElementById('todayTransactions').textContent = todaySales.length;
+                
+                // Header stats
+                document.getElementById('dailySales').textContent = todaySales.length;
+                document.getElementById('totalRevenue').textContent = todayRevenue.toFixed(2) + '€';
+                
+                // Sales screen stats
+                document.getElementById('todayRevenue').textContent = todayRevenue.toFixed(2) + '€';
+                document.getElementById('todaySalesCount').textContent = todaySales.length;
+                
+                this.checkLowStock();
+            }
+            
+            checkLowStock() {
+                const lowStockProducts = this.products.filter(p => p.stock <= p.minStock);
+                const alertDiv = document.getElementById('lowStockAlert');
+                
+                if (lowStockProducts.length > 0 && this.settings.stockAlerts) {
+                    const itemsText = lowStockProducts.map(p => p.name).join(', ');
+                    document.getElementById('lowStockItems').textContent = itemsText;
+                    alertDiv.classList.remove('hidden');
+                } else {
+                    alertDiv.classList.add('hidden');
+                }
+            }
+            
+            showNotification(message, type = 'info') {
+                const colors = {
+                    success: 'bg-green-500',
+                    error: 'bg-red-500',
+                    warning: 'bg-yellow-500',
+                    info: 'bg-blue-500'
+                };
+                
+                const notification = document.createElement('div');
+                notification.className = `${colors[type]} text-white px-4 py-3 rounded-xl shadow-lg mb-2 bounce-in`;
+                notification.textContent = message;
+                
+                this.elements.notifications.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+            }
+            
+            exportData() {
+                const data = {
+                    products: this.products,
+                    sales: this.sales,
+                    settings: this.settings,
+                    exportDate: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `kiosk-backup-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Daten erfolgreich exportiert!', 'success');
+            }
+            
+            resetData() {
+                if (confirm('Sind Sie sicher? Alle Daten werden unwiderruflich gelöscht!')) {
+                    localStorage.clear();
+                    location.reload();
+                }
+            }
+            
+            saveData() {
+                localStorage.setItem('smartKioskProducts', JSON.stringify(this.products));
+                localStorage.setItem('smartKioskSales', JSON.stringify(this.sales));
+            }
+            
+            saveSettings() {
+                localStorage.setItem('smartKioskSettings', JSON.stringify(this.settings));
+            }
+            
+            // Cash Register Functions
+            renderCashRegister() {
+                this.renderCashRegisterProducts();
+                this.renderQuickAddButtons();
+                this.updateCartDisplay();
+            }
+            
+            renderCashRegisterProducts() {
+                const searchTerm = document.getElementById('cashRegisterSearch').value.toLowerCase();
+                const availableProducts = this.products.filter(p => 
+                    p.stock > 0 && 
+                    (p.name.toLowerCase().includes(searchTerm) || 
+                     p.barcode.includes(searchTerm) || 
+                     searchTerm === '')
+                );
+                
+                const html = availableProducts.map(product => `
+                    <div class="flex items-center justify-between bg-white border border-gray-200 rounded-xl p-3">
+                        <div class="flex-1">
+                            <div class="font-medium">${product.name}</div>
+                            <div class="text-sm text-gray-500">${product.price.toFixed(2)}€ • ${product.stock} verfügbar</div>
+                        </div>
+                        <button onclick="app.addToCart(${product.id})" 
+                                class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                            + Hinzufügen
+                        </button>
+                    </div>
+                `).join('');
+                
+                document.getElementById('cashRegisterProducts').innerHTML = html || 
+                    '<div class="text-center text-gray-500 py-4">Keine Produkte verfügbar</div>';
+            }
+            
+            renderQuickAddButtons() {
+                const popularProducts = this.products.filter(p => p.stock > 0).slice(0, 4);
+                const html = popularProducts.map(product => `
+                    <button onclick="app.addToCart(${product.id})" 
+                            class="bg-blue-100 hover:bg-blue-200 border border-blue-300 p-2 rounded-xl text-sm font-medium transition-colors">
+                        ${product.name} (${product.price.toFixed(2)}€)
+                    </button>
+                `).join('');
+                
+                document.getElementById('quickAddButtons').innerHTML = html;
+            }
+            
+            addToCart(productId) {
+                const product = this.products.find(p => p.id === productId);
+                if (!product || product.stock <= 0) {
+                    this.showNotification('Produkt nicht verfügbar!', 'error');
+                    return;
+                }
+                
+                const existingItem = this.cart.find(item => item.productId === productId);
+                if (existingItem) {
+                    if (existingItem.quantity < product.stock) {
+                        existingItem.quantity++;
+                    } else {
+                        this.showNotification('Nicht genug Bestand verfügbar!', 'warning');
+                        return;
+                    }
+                } else {
+                    this.cart.push({
+                        productId: product.id,
+                        name: product.name,
+                        price: product.price,
+                        quantity: 1
+                    });
+                }
+                
+                this.updateCartDisplay();
+                this.showNotification(`${product.name} zum Warenkorb hinzugefügt!`, 'success');
+            }
+            
+            addToCartFromSearch() {
+                const searchTerm = document.getElementById('cashRegisterSearch').value.trim();
+                if (!searchTerm) return;
+                
+                // Try to find by barcode first, then by name
+                let product = this.products.find(p => p.barcode === searchTerm);
+                if (!product) {
+                    product = this.products.find(p => 
+                        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+                    );
+                }
+                
+                if (product) {
+                    this.addToCart(product.id);
+                    document.getElementById('cashRegisterSearch').value = '';
+                } else {
+                    this.showNotification('Produkt nicht gefunden!', 'error');
+                }
+            }
+            
+            updateCartDisplay() {
+                const cartItemsDiv = document.getElementById('cartItems');
+                const cartTotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const itemCount = this.cart.reduce((sum, item) => sum + item.quantity, 0);
+                
+                if (this.cart.length === 0) {
+                    cartItemsDiv.innerHTML = '<div class="text-center text-gray-500 py-4">Warenkorb ist leer</div>';
+                } else {
+                    const html = this.cart.map(item => `
+                        <div class="flex items-center justify-between bg-white rounded-lg p-2">
+                            <div class="flex-1">
+                                <div class="font-medium text-sm">${item.name}</div>
+                                <div class="text-xs text-gray-500">${item.price.toFixed(2)}€ × ${item.quantity}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="font-bold text-sm">${(item.price * item.quantity).toFixed(2)}€</div>
+                                <button onclick="app.removeFromCart(${item.productId})" 
+                                        class="text-red-600 hover:text-red-800 text-sm">
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                    cartItemsDiv.innerHTML = html;
+                }
+                
+                document.getElementById('cartTotal').textContent = cartTotal.toFixed(2) + '€';
+                document.getElementById('cartItemCount').textContent = itemCount;
+                document.getElementById('checkoutBtn').disabled = this.cart.length === 0;
+            }
+            
+            removeFromCart(productId) {
+                this.cart = this.cart.filter(item => item.productId !== productId);
+                this.updateCartDisplay();
+                this.showNotification('Artikel entfernt!', 'success');
+            }
+            
+            clearCart() {
+                if (this.cart.length === 0) return;
+                
+                if (confirm('Warenkorb wirklich leeren?')) {
+                    this.cart = [];
+                    this.updateCartDisplay();
+                    this.showNotification('Warenkorb geleert!', 'success');
+                }
+            }
+            
+            showCheckout() {
+                if (this.cart.length === 0) return;
+                
+                // Update checkout summary
+                const summaryDiv = document.getElementById('checkoutSummary');
+                const total = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                
+                const html = this.cart.map(item => `
+                    <div class="flex justify-between">
+                        <span>${item.name} × ${item.quantity}</span>
+                        <span>${(item.price * item.quantity).toFixed(2)}€</span>
+                    </div>
+                `).join('');
+                
+                summaryDiv.innerHTML = html;
+                document.getElementById('checkoutTotal').textContent = total.toFixed(2) + '€';
+                
+                // Reset payment form
+                this.selectedPaymentMethod = null;
+                document.getElementById('cashPayment').classList.add('hidden');
+                document.getElementById('cashReceived').value = '';
+                document.getElementById('changeAmount').textContent = '';
+                document.getElementById('completePayment').disabled = true;
+                
+                // Reset payment method buttons
+                document.querySelectorAll('.payment-method').forEach(btn => {
+                    btn.classList.remove('ring-2', 'ring-green-500');
+                });
+                
+                this.elements.checkoutModal.classList.remove('hidden');
+            }
+            
+            hideCheckout() {
+                this.elements.checkoutModal.classList.add('hidden');
+            }
+            
+            selectPaymentMethod(method) {
+                this.selectedPaymentMethod = method;
+                
+                // Update button styles
+                document.querySelectorAll('.payment-method').forEach(btn => {
+                    btn.classList.remove('ring-2', 'ring-green-500');
+                });
+                
+                const selectedBtn = document.querySelector(`[data-method="${method}"]`);
+                selectedBtn.classList.add('ring-2', 'ring-green-500');
+                
+                // Show/hide cash payment fields
+                if (method === 'cash') {
+                    document.getElementById('cashPayment').classList.remove('hidden');
+                    document.getElementById('completePayment').disabled = true;
+                } else {
+                    document.getElementById('cashPayment').classList.add('hidden');
+                    document.getElementById('completePayment').disabled = false;
+                }
+            }
+            
+            calculateChange() {
+                const total = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const received = parseFloat(document.getElementById('cashReceived').value) || 0;
+                const change = received - total;
+                
+                const changeDiv = document.getElementById('changeAmount');
+                if (received >= total && received > 0) {
+                    changeDiv.textContent = `Rückgeld: ${change.toFixed(2)}€`;
+                    changeDiv.className = 'mt-2 text-center font-bold text-green-600';
+                    document.getElementById('completePayment').disabled = false;
+                } else if (received > 0) {
+                    changeDiv.textContent = `Noch ${(total - received).toFixed(2)}€ fehlen`;
+                    changeDiv.className = 'mt-2 text-center font-bold text-red-600';
+                    document.getElementById('completePayment').disabled = true;
+                } else {
+                    changeDiv.textContent = '';
+                    document.getElementById('completePayment').disabled = true;
+                }
+            }
+            
+            completePayment() {
+                if (!this.selectedPaymentMethod || this.cart.length === 0) return;
+                
+                const total = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                
+                // Process each item in cart
+                this.cart.forEach(cartItem => {
+                    const product = this.products.find(p => p.id === cartItem.productId);
+                    if (product) {
+                        // Reduce stock
+                        product.stock -= cartItem.quantity;
+                        
+                        // Record individual sales
+                        for (let i = 0; i < cartItem.quantity; i++) {
+                            const sale = {
+                                id: Date.now() + i,
+                                productId: product.id,
+                                productName: product.name,
+                                price: product.price,
+                                paymentMethod: this.selectedPaymentMethod,
+                                timestamp: new Date().toISOString(),
+                                date: new Date().toDateString()
+                            };
+                            this.sales.push(sale);
+                        }
+                    }
+                });
+                
+                // Save data
+                this.saveData();
+                this.updateAllStats();
+                
+                // Show success message
+                this.showNotification(`Bezahlung erfolgreich! Gesamt: ${total.toFixed(2)}€`, 'success');
+                
+                // Clear cart and close modal
+                this.cart = [];
+                this.updateCartDisplay();
+                this.hideCheckout();
+                
+                // Update displays
+                this.renderCashRegisterProducts();
+                this.checkLowStock();
+            }
+        }
+        
+        // Initialize app
+        const app = new SmartKioskApp();
+        
+        // ZXing Barcode Scanner Functions
+        let codeReader;
+        let scanning = false;
+
+        function startCameraScan() {
+            if (!codeReader) {
+                codeReader = new ZXing.BrowserMultiFormatReader();
+            }
+
+            const previewElem = document.getElementById("videoPreview");
+            const placeholderElem = document.getElementById("scannerPlaceholder");
+            const startBtn = document.getElementById("startCameraBtn");
+            const stopBtn = document.getElementById("stopCameraBtn");
+
+            // Show video, hide placeholder
+            previewElem.style.display = "block";
+            placeholderElem.style.display = "none";
+            startBtn.style.display = "none";
+            stopBtn.style.display = "block";
+
+            codeReader
+                .decodeFromVideoDevice(null, "videoPreview", (result, err) => {
+                    if (result && !scanning) {
+                        scanning = true;
+                        app.quickScan(result.text);
+                        stopCameraScan();
+                        setTimeout(() => { scanning = false; }, 1000);
+                    }
+                })
+                .catch((err) => {
+                    console.error(err);
+                    app.showNotification('Kamera-Zugriff fehlgeschlagen!', 'error');
+                    stopCameraScan();
+                });
+        }
+
+        function stopCameraScan() {
+            if (codeReader) {
+                codeReader.reset();
+            }
+            
+            const previewElem = document.getElementById("videoPreview");
+            const placeholderElem = document.getElementById("scannerPlaceholder");
+            const startBtn = document.getElementById("startCameraBtn");
+            const stopBtn = document.getElementById("stopCameraBtn");
+
+            // Hide video, show placeholder
+            previewElem.style.display = "none";
+            placeholderElem.style.display = "flex";
+            startBtn.style.display = "block";
+            stopBtn.style.display = "none";
+            
+            scanning = false;
+        }
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9741d464f211cad1',t:'MTc1NjAyNzgxMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
