@@ -204,6 +204,13 @@
                 <div class="scanner-line"></div>
             </div>
             
+            <!-- Camera Scan Button -->
+            <div class="mb-4">
+                <button onclick="startCameraScan()" class="w-full bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-xl font-medium transition-colors text-lg">
+                    📷 Barcode scannen
+                </button>
+            </div>
+            
             <!-- Camera Controls -->
             <div class="grid grid-cols-2 gap-3 mb-4">
                 <button id="startCameraBtn" onclick="startCameraScan()" class="bg-green-600 hover:bg-green-700 text-white p-3 rounded-xl text-sm font-medium transition-colors">
@@ -211,13 +218,6 @@
                 </button>
                 <button id="stopCameraBtn" onclick="stopCameraScan()" class="bg-red-600 hover:bg-red-700 text-white p-3 rounded-xl text-sm font-medium transition-colors" style="display:none;">
                     ⏹️ Kamera stoppen
-                </button>
-            </div>
-            
-            <!-- Camera Scan Button -->
-            <div class="mb-4">
-                <button onclick="startCameraScan()" class="w-full bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-xl font-medium transition-colors">
-                    📷 Barcode scannen
                 </button>
             </div>
             
@@ -1263,57 +1263,93 @@
         // ZXing Barcode Scanner Functions
         let codeReader;
         let scanning = false;
+        let currentStream = null;
 
-        function startCameraScan() {
-            if (!codeReader) {
-                codeReader = new ZXing.BrowserMultiFormatReader();
-            }
+        async function startCameraScan() {
+            try {
+                // Initialize code reader if not exists
+                if (!codeReader) {
+                    codeReader = new ZXing.BrowserMultiFormatReader();
+                }
 
-            const previewElem = document.getElementById("videoPreview");
-            const placeholderElem = document.getElementById("scannerPlaceholder");
-            const startBtn = document.getElementById("startCameraBtn");
-            const stopBtn = document.getElementById("stopCameraBtn");
+                const previewElem = document.getElementById("videoPreview");
+                const placeholderElem = document.getElementById("scannerPlaceholder");
+                const startBtn = document.getElementById("startCameraBtn");
+                const stopBtn = document.getElementById("stopCameraBtn");
 
-            // Show video, hide placeholder
-            previewElem.style.display = "block";
-            placeholderElem.style.display = "none";
-            startBtn.style.display = "none";
-            stopBtn.style.display = "block";
+                // Show video, hide placeholder
+                previewElem.style.display = "block";
+                placeholderElem.style.display = "none";
+                startBtn.style.display = "none";
+                stopBtn.style.display = "block";
 
-            codeReader
-                .decodeFromVideoDevice(null, "videoPreview", (result, err) => {
+                app.showNotification('Kamera wird gestartet...', 'info');
+
+                // Get available video devices
+                const videoInputDevices = await codeReader.listVideoInputDevices();
+                
+                if (videoInputDevices.length === 0) {
+                    throw new Error('Keine Kamera gefunden');
+                }
+
+                // Use the first available camera (usually back camera on mobile)
+                const selectedDeviceId = videoInputDevices[0].deviceId;
+
+                // Start decoding
+                const result = await codeReader.decodeFromVideoDevice(selectedDeviceId, "videoPreview", (result, err) => {
                     if (result && !scanning) {
                         scanning = true;
-                        app.quickScan(result.text);
-                        stopCameraScan();
-                        setTimeout(() => { scanning = false; }, 1000);
+                        app.showNotification(`Barcode erkannt: ${result.text}`, 'success');
+                        
+                        // Process the scanned barcode
+                        document.getElementById('manualBarcode').value = result.text;
+                        app.searchByBarcode();
+                        
+                        // Stop scanning after successful scan
+                        setTimeout(() => {
+                            stopCameraScan();
+                            scanning = false;
+                        }, 1000);
                     }
-                })
-                .catch((err) => {
-                    console.error(err);
-                    app.showNotification('Kamera-Zugriff fehlgeschlagen!', 'error');
-                    stopCameraScan();
+                    
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.warn('Scan error:', err);
+                    }
                 });
+
+                app.showNotification('Kamera bereit! Halten Sie den Barcode vor die Kamera.', 'success');
+
+            } catch (err) {
+                console.error('Camera error:', err);
+                app.showNotification('Kamera-Zugriff fehlgeschlagen! Bitte Berechtigung erteilen.', 'error');
+                stopCameraScan();
+            }
         }
 
         function stopCameraScan() {
-            if (codeReader) {
-                codeReader.reset();
-            }
-            
-            const previewElem = document.getElementById("videoPreview");
-            const placeholderElem = document.getElementById("scannerPlaceholder");
-            const startBtn = document.getElementById("startCameraBtn");
-            const stopBtn = document.getElementById("stopCameraBtn");
+            try {
+                if (codeReader) {
+                    codeReader.reset();
+                }
+                
+                const previewElem = document.getElementById("videoPreview");
+                const placeholderElem = document.getElementById("scannerPlaceholder");
+                const startBtn = document.getElementById("startCameraBtn");
+                const stopBtn = document.getElementById("stopCameraBtn");
 
-            // Hide video, show placeholder
-            previewElem.style.display = "none";
-            placeholderElem.style.display = "flex";
-            startBtn.style.display = "block";
-            stopBtn.style.display = "none";
-            
-            scanning = false;
+                // Hide video, show placeholder
+                previewElem.style.display = "none";
+                placeholderElem.style.display = "flex";
+                startBtn.style.display = "block";
+                stopBtn.style.display = "none";
+                
+                scanning = false;
+                app.showNotification('Kamera gestoppt', 'info');
+                
+            } catch (err) {
+                console.error('Stop camera error:', err);
+            }
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9741d464f211cad1',t:'MTc1NjAyNzgxMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97422bf3176b7270',t:'MTc1NjAzMTM5OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
